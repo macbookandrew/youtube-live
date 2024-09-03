@@ -1,6 +1,6 @@
 # YouTube Live
 
-Provides an `iframe` for YouTube live videos
+Provides an embed code to show your current YouTube Live broadcast on any other site.
 
 ## Setup
 
