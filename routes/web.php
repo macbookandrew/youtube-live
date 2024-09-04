@@ -1,10 +1,13 @@
 <?php
 
+use App\Http\Controllers\LiveController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::get('/live/{channel}', LiveController::class)->name('channel.live');
 
 Route::middleware([
     'auth:sanctum',
