@@ -19,7 +19,10 @@ class ChannelTest extends TestCase
 
         $this->assertFalse($channel->is_live);
 
-        Http::assertSent(fn (Request $request) => str($request->url())->contains($channel->google_channel_id));
+        Http::assertSent(fn (Request $request) => str($request->url())->containsAll([
+            $channel->google_channel_id,
+            'key='.config('services.google.api_key'),
+        ]));
     }
 
     public function test_is_live_attribute_for_some_items(): void
@@ -30,7 +33,10 @@ class ChannelTest extends TestCase
 
         $this->assertTrue($channel->is_live);
 
-        Http::assertSent(fn (Request $request) => str($request->url())->contains($channel->google_channel_id));
+        Http::assertSent(fn (Request $request) => str($request->url())->containsAll([
+            $channel->google_channel_id,
+            'key='.config('services.google.api_key'),
+        ]));
     }
 
     public function test_current_video_id_attribute(): void
@@ -43,7 +49,10 @@ class ChannelTest extends TestCase
 
         $this->assertEquals($items[0]['id']['videoId'], $channel->current_video_id);
 
-        Http::assertSent(fn (Request $request) => str($request->url())->contains($channel->google_channel_id));
+        Http::assertSent(fn (Request $request) => str($request->url())->containsAll([
+            $channel->google_channel_id,
+            'key='.config('services.google.api_key'),
+        ]));
     }
 
     public function test_flush_cache(): void
@@ -56,5 +65,21 @@ class ChannelTest extends TestCase
             ->andReturnTrue();
 
         $this->assertTrue($channel->flushCache());
+    }
+
+    public function test_custom_api_key(): void
+    {
+        $channel = Channel::factory()->create([
+            'google_api_key' => 'custom-api-key',
+        ]);
+
+        Http::fake(['https://www.googleapis.com/youtube/v3/search*' => []]);
+
+        $this->assertFalse($channel->is_live);
+
+        Http::assertSent(fn (Request $request) => str($request->url())->containsAll([
+            $channel->google_channel_id,
+            'key='.$channel->google_api_key,
+        ]));
     }
 }

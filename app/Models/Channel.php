@@ -17,20 +17,24 @@ use Mtvs\EloquentHashids\HashidRouting;
  * @property string $name
  * @property string|null $fallback_image
  * @property string|null $fallback_video
+ * @property int $cache_ttl_seconds
+ * @property string|null $google_api_key
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read string $cache_key
- * @property-read string $hashid
  * @property-read string $current_video_id
+ * @property-read string $hashid
  * @property-read bool $is_live
  *
  * @method static \Database\Factories\ChannelFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder|Channel newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Channel newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Channel query()
+ * @method static \Illuminate\Database\Eloquent\Builder|Channel whereCacheTtlSeconds($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereFallbackImage($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereFallbackVideo($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Channel whereGoogleApiKey($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereGoogleChannelId($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Channel whereName($value)
@@ -47,8 +51,8 @@ class Channel extends Model
     /** @return ?Collection<int, array{kind: string, etag: string, id: array{kind: string, videoId: string}, snippet: array}> */
     public function liveVideos(): ?Collection
     {
-        return Cache::remember($this->cache_key, now()->addMinutes(15), fn () => Http::get('https://www.googleapis.com/youtube/v3/search', [
-            'key' => config('services.google.api_key'),
+        return Cache::remember($this->cache_key, now()->addSeconds($this->cache_ttl_seconds), fn () => Http::get('https://www.googleapis.com/youtube/v3/search', [
+            'key' => $this->google_api_key ?? config('services.google.api_key'),
             'channelId' => $this->google_channel_id,
             'part' => 'id,snippet',
             'type' => 'video',
