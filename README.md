@@ -1,6 +1,8 @@
 # YouTube Live
 
-Provides an `iframe` for YouTube live videos
+Provides an embed code to show your current YouTube Live broadcast on any other site.
+
+Basically this is a simpler, hosted version of my [WordPress plugin](https://wordpress.org/plugins/wp-youtube-live/).
 
 ## Setup
 

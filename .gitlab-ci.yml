@@ -1,0 +1,137 @@
+stages:
+  - test
+  - build
+  - deploy
+
+# Speed up builds
+cache:
+  key: $CI_BUILD_REF_NAME
+  paths:
+    - .npm
+    - node_modules
+    - public
+    - vendor
+
+variables:
+  MYSQL_ROOT_PASSWORD: root
+  MYSQL_DATABASE: $MYSQL_DATABASE
+  MYSQL_USER: $MYSQL_USER
+  MYSQL_PASSWORD: $MYSQL_PASSWORD
+  DB_HOST: mysql
+  DEPLOY_PROD: https://youtube-live.andrewrminion.com/api/deploy-assets
+  SITE_URL_PROD: https://youtube-live.andrewrminion.com
+
+composer:
+  stage: test
+  tags:
+    - docker
+  interruptible: true
+  image: kirschbaumdevelopment/laravel-test-runner:8.2
+  script:
+    # - composer audit # Need composer update in the image.
+    - composer install --prefer-dist --no-ansi --no-interaction --no-progress
+
+code-style:
+  stage: test
+  tags:
+    - docker
+  interruptible: true
+  image: kirschbaumdevelopment/laravel-test-runner:8.2
+  allow_failure: true
+  needs:
+    - composer
+  before_script:
+    - echo -e "\\e[0Ksection_start:`date +%s`:setup[collapsed=true]\r\\e[0KInstalling dependencies"
+    - if [ ! -f "vendor/autoload.php" ]; then composer install --prefer-dist --no-ansi --no-interaction --no-progress; fi;
+    - echo -e "\\e[0Ksection_end:`date +%s`:setup\r\\e[0K"
+  script:
+    - ./vendor/bin/pint --test
+
+code-quality:
+  stage: test
+  tags:
+    - docker
+  interruptible: true
+  image: kirschbaumdevelopment/laravel-test-runner:8.2
+  allow_failure: true
+  needs:
+    - composer
+  before_script:
+    - echo -e "\\e[0Ksection_start:`date +%s`:setup[collapsed=true]\r\\e[0KInstalling dependencies"
+    - if [ ! -f "vendor/autoload.php" ]; then composer install --prefer-dist --no-ansi --no-interaction --no-progress; fi;
+    - echo -e "\\e[0Ksection_end:`date +%s`:setup\r\\e[0K"
+  script:
+    - ./vendor/bin/phpstan analyze --error-format gitlab > phpstan.json
+  artifacts:
+    paths:
+      - phpstan.json
+    expire_in: 7 days
+    when: always
+    reports:
+      codequality: phpstan.json
+
+phpunit:
+  stage: test
+  tags:
+    - docker
+  interruptible: true
+  image: kirschbaumdevelopment/laravel-test-runner:8.2
+  services:
+    - mysql:8.0
+  needs:
+    - composer
+  before_script:
+    - echo -e "\\e[0Ksection_start:`date +%s`:setup[collapsed=true]\r\\e[0KInstalling dependencies and configuring app"
+    - if [ ! -f "vendor/autoload.php" ]; then composer install --prefer-dist --no-ansi --no-interaction --no-progress; fi;
+    - cp .env.example .env
+    - echo 'DB_DATABASE='$MYSQL_DATABASE >> .env
+    - echo 'DB_USERNAME='$MYSQL_USER >> .env
+    - echo 'DB_PASSWORD='$MYSQL_PASSWORD >> .env
+    - php artisan key:generate
+    - php artisan migrate:refresh --seed
+    - php artisan airdrop:download
+    - if [ ! -f ".airdrop_skip" ]; then npm ci --no-audit; npm run build; fi
+    - php artisan airdrop:upload
+    - echo -e "\\e[0Ksection_end:`date +%s`:setup\r\\e[0K"
+  script:
+    - php artisan test --coverage-text --coverage-cobertura=coverage.cobertura.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.cobertura.xml
+
+build-assets:
+  stage: build
+  tags:
+    - docker
+  interruptible: true
+  image: kirschbaumdevelopment/laravel-test-runner:8.2
+  needs:
+    - composer
+  before_script:
+    - echo -e "\\e[0Ksection_start:`date +%s`:setup[collapsed=true]\r\\e[0KInstalling dependencies and configuring app"
+    - if [ ! -f "vendor/autoload.php" ]; then composer install --prefer-dist --no-ansi --no-interaction --no-progress; fi;
+    - cp .env.example .env
+    - echo 'APP_ENV=production' >> .env
+    - php artisan key:generate
+    - echo -e "\\e[0Ksection_end:`date +%s`:setup\r\\e[0K"
+  script:
+    - php artisan airdrop:download -v
+    - if [ ! -f ".airdrop_skip" ]; then npm ci --no-audit; npm run build; fi
+    - php artisan airdrop:upload -v
+    - php artisan airdrop:debug
+  only:
+    - master
+
+deploy:
+  stage: deploy
+  environment:
+    name: production
+    url: $SITE_URL_PROD
+  variables:
+    DEPLOY_URL: $DEPLOY_PROD
+  script:
+    - curl --request POST --url "$DEPLOY_URL" --header "accept:application/json" --header "content-type:application/json" --header "x-gitlab-event:Push Hook" --header "authorization:Bearer $DEPLOYMENT_API_TOKEN"
+  only:
+    - master
